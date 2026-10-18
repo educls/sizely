@@ -1,7 +1,7 @@
 <div align="center">
 
 <!-- Absolute URL so the logo also shows on npm. jsDelivr serves SVG with an image MIME type; raw.githubusercontent.com doesn't. -->
-# <img src="https://cdn.jsdelivr.net/gh/educls/sizely@main/docs/logo.svg" alt="" height="32" /> sizely
+# <img src="https://cdn.jsdelivr.net/gh/educls/sizely@main/docs/logo.svg" alt="" height="32" align="center" /> sizely
 
 **Stop rejecting uploads. Fix them.**
 
