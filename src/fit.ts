@@ -227,6 +227,8 @@ async function fitPdf(
     })
   } catch (error) {
     if ((error as Error)?.name === 'AbortError' || options.signal?.aborted) throw error
+    // A missing optional dependency is the developer's to fix, not the end user's.
+    if ((error as Error)?.name === 'SizelyDependencyError') throw error
     const code = (error as { issueCode?: unknown })?.issueCode
     const issueCode = code === 'protected' ? 'protected' : 'unreadable'
     const issue: Issue = { code: issueCode, message: message(locale, issueCode) }

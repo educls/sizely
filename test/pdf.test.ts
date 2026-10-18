@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FitError } from '../src/errors'
 import { compressPdf, PdfCompressError, pdfEngine } from '../src/pdf'
 import { toRgba, unpredict } from '../src/pdf/pixels'
@@ -214,5 +214,44 @@ describe('pdfEngine with fit()', () => {
     const error = await sizely.pdf().maxSize('20KB').fit(file, { pdfEngine: pdfEngine({ engine }) }).catch((e) => e)
     expect(error).toMatchObject({ reason: 'gave_up' })
     expect(error.bestEffort.size).toBeLessThan(scanBytes(A4.width, A4.height))
+  })
+})
+
+describe('without @cantoo/pdf-lib installed', () => {
+  const missing = {
+    name: 'SizelyDependencyError',
+    message: 'sizely/pdf needs @cantoo/pdf-lib. Install it with: npm install @cantoo/pdf-lib',
+  }
+
+  const importWithoutPdfLib = async () => {
+    vi.resetModules()
+    vi.doMock('@cantoo/pdf-lib', () => {
+      throw new Error('not found')
+    })
+    return {
+      pdf: await import('../src/pdf'),
+      rules: await import('../src/rules'),
+      errors: await import('../src/errors'),
+    }
+  }
+
+  afterEach(() => {
+    vi.doUnmock('@cantoo/pdf-lib')
+    vi.resetModules()
+  })
+
+  it('imports fine and only fails when compressPdf is called, with a clear error', async () => {
+    const { file } = await buildPdf([{ kind: 'jpeg', ...A4 }])
+    const { pdf } = await importWithoutPdfLib()
+    await expect(pdf.compressPdf(file)).rejects.toMatchObject(missing)
+  })
+
+  it('is rethrown by fit() as is, not turned into a FitError', async () => {
+    const { file } = await buildPdf([{ kind: 'jpeg', ...A4 }])
+    const { pdf, rules, errors } = await importWithoutPdfLib()
+    const error = await rules.sizely.pdf().maxSize('1MB').fit(file, { pdfEngine: pdf.pdfEngine() }).catch((e) => e)
+    expect(error).toMatchObject(missing)
+    expect(error).not.toBeInstanceOf(errors.FitError)
+    expect(error).not.toBeInstanceOf(FitError)
   })
 })

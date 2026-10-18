@@ -1,15 +1,4 @@
-import {
-  decodePDFRawStream,
-  EncryptedPDFError,
-  PDFArray,
-  PDFBool,
-  PDFDict,
-  PDFDocument,
-  PDFName,
-  PDFNumber,
-  PDFRawStream,
-  PDFRef,
-} from '@cantoo/pdf-lib'
+import type { PDFDict, PDFDocument, PDFRawStream, PDFRef } from '@cantoo/pdf-lib'
 import { defaultEngine } from '../engines/canvas'
 import { throwIfAborted } from '../errors'
 import { formatSize } from '../size'
@@ -100,47 +89,74 @@ interface Encoded {
   height: number
 }
 
-const N = (name: string) => PDFName.of(name)
+type PdfLib = typeof import('@cantoo/pdf-lib')
+
+const MISSING_PDF_LIB = 'sizely/pdf needs @cantoo/pdf-lib. Install it with: npm install @cantoo/pdf-lib'
+
+/** Set by `loadPdfLib()`; every helper below runs after `compressPdf` has awaited it. */
+let lib: PdfLib
+let loading: Promise<PdfLib> | undefined
+
+/**
+ * `@cantoo/pdf-lib` is an optional peer dependency, so it's loaded on first
+ * use: importing sizely/pdf never fails, and a missing install gets a clear
+ * message instead of a raw module-not-found error.
+ */
+function loadPdfLib(): Promise<PdfLib> {
+  loading ??= import('@cantoo/pdf-lib').then(
+    (mod) => (lib = mod),
+    (cause: unknown) => {
+      loading = undefined
+      const error = new Error(MISSING_PDF_LIB)
+      error.name = 'SizelyDependencyError'
+      ;(error as { cause?: unknown }).cause = cause
+      throw error
+    },
+  )
+  return loading
+}
+
+const N = (name: string) => lib.PDFName.of(name)
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const SEARCH_STEPS = 5
 const MAX_SHRINK_ROUNDS = 8
 
 function filterName(dict: PDFDict): string | undefined {
   const filter = dict.lookup(N('Filter'))
-  if (filter instanceof PDFName) return filter.decodeText()
-  if (filter instanceof PDFArray) {
+  if (filter instanceof lib.PDFName) return filter.decodeText()
+  if (filter instanceof lib.PDFArray) {
     if (filter.size() === 0) return undefined
-    if (filter.size() > 1) return filter.asArray().map((f) => (f instanceof PDFName ? f.decodeText() : '?')).join('+')
+    if (filter.size() > 1) return filter.asArray().map((f) => (f instanceof lib.PDFName ? f.decodeText() : '?')).join('+')
     const only = filter.lookup(0)
-    return only instanceof PDFName ? only.decodeText() : '?'
+    return only instanceof lib.PDFName ? only.decodeText() : '?'
   }
   return undefined
 }
 
 function decodeParm(dict: PDFDict, key: string): number | undefined {
   let parms = dict.lookup(N('DecodeParms'))
-  if (parms instanceof PDFArray) parms = parms.lookup(0)
-  if (!(parms instanceof PDFDict)) return undefined
+  if (parms instanceof lib.PDFArray) parms = parms.lookup(0)
+  if (!(parms instanceof lib.PDFDict)) return undefined
   const value = parms.lookup(N(key))
-  return value instanceof PDFNumber ? value.asNumber() : undefined
+  return value instanceof lib.PDFNumber ? value.asNumber() : undefined
 }
 
 /** Returns the channel count and whether the colour space can be kept, or a skip reason. */
 function colorSpaceInfo(dict: PDFDict): { channels: 1 | 3; keep: boolean } | string {
   const cs = dict.lookup(N('ColorSpace'))
-  if (cs instanceof PDFName) {
+  if (cs instanceof lib.PDFName) {
     const name = cs.decodeText()
     if (name === 'DeviceRGB') return { channels: 3, keep: true }
     if (name === 'DeviceGray') return { channels: 1, keep: false }
     return `colour space ${name}`
   }
-  if (cs instanceof PDFArray) {
+  if (cs instanceof lib.PDFArray) {
     const family = cs.lookup(0)
-    const familyName = family instanceof PDFName ? family.decodeText() : '?'
+    const familyName = family instanceof lib.PDFName ? family.decodeText() : '?'
     if (familyName === 'ICCBased') {
       const profile = cs.lookup(1)
-      const n = profile instanceof PDFRawStream ? profile.dict.lookup(N('N')) : undefined
-      const channels = n instanceof PDFNumber ? n.asNumber() : 0
+      const n = profile instanceof lib.PDFRawStream ? profile.dict.lookup(N('N')) : undefined
+      const channels = n instanceof lib.PDFNumber ? n.asNumber() : 0
       if (channels === 3) return { channels: 3, keep: true }
       if (channels === 1) return { channels: 1, keep: false }
       return `ICC colour space with ${channels} channels`
@@ -155,7 +171,7 @@ function colorSpaceInfo(dict: PDFDict): { channels: 1 | 3; keep: boolean } | str
 function analyzeReport(ref: PDFRef, stream: PDFRawStream): PdfImageReport {
   const num = (key: string) => {
     const v = stream.dict.lookup(N(key))
-    return v instanceof PDFNumber ? v.asNumber() : 0
+    return v instanceof lib.PDFNumber ? v.asNumber() : 0
   }
   return {
     ref: ref.toString(),
@@ -170,8 +186,8 @@ function analyzeReport(ref: PDFRef, stream: PDFRawStream): PdfImageReport {
 /** True when a Decode array is present and differs from the default [0 1 0 1 …]. */
 function hasCustomDecode(dict: PDFDict): boolean {
   const decode = dict.lookup(N('Decode'))
-  if (!(decode instanceof PDFArray)) return false
-  return decode.asArray().some((v, i) => !(v instanceof PDFNumber) || v.asNumber() !== i % 2)
+  if (!(decode instanceof lib.PDFArray)) return false
+  return decode.asArray().some((v, i) => !(v instanceof lib.PDFNumber) || v.asNumber() !== i % 2)
 }
 
 function analyze(ref: PDFRef, stream: PDFRawStream, minImageBytes: number): Candidate | PdfImageReport {
@@ -181,13 +197,13 @@ function analyze(ref: PDFRef, stream: PDFRawStream, minImageBytes: number): Cand
   const bpc = dict.lookup(N('BitsPerComponent'))
   const skip = (reason: string) => ({ ...report, reason })
 
-  if (dict.lookup(N('ImageMask')) === PDFBool.True) return skip('image mask')
-  if (!(bpc instanceof PDFNumber) || bpc.asNumber() !== 8) {
-    return skip(`${bpc instanceof PDFNumber ? bpc.asNumber() : '?'} bits per component`)
+  if (dict.lookup(N('ImageMask')) === lib.PDFBool.True) return skip('image mask')
+  if (!(bpc instanceof lib.PDFNumber) || bpc.asNumber() !== 8) {
+    return skip(`${bpc instanceof lib.PDFNumber ? bpc.asNumber() : '?'} bits per component`)
   }
   if (filter !== 'DCTDecode' && filter !== 'FlateDecode') return skip(`filter ${filter}`)
   if (hasCustomDecode(dict)) return skip('custom Decode array')
-  if (dict.lookup(N('Mask')) instanceof PDFArray) return skip('colour-key mask')
+  if (dict.lookup(N('Mask')) instanceof lib.PDFArray) return skip('colour-key mask')
   if (!report.width || !report.height) return skip('missing dimensions')
   if (report.originalBytes < minImageBytes) return skip('already small')
 
@@ -211,12 +227,12 @@ function analyze(ref: PDFRef, stream: PDFRawStream, minImageBytes: number): Cand
 
 function isSigned(doc: PDFDocument): boolean {
   const acroForm = doc.catalog.lookup(N('AcroForm'))
-  if (acroForm instanceof PDFDict) {
+  if (acroForm instanceof lib.PDFDict) {
     const flags = acroForm.lookup(N('SigFlags'))
-    if (flags instanceof PDFNumber && (flags.asNumber() & 1) === 1) return true
+    if (flags instanceof lib.PDFNumber && (flags.asNumber() & 1) === 1) return true
   }
   for (const [, object] of doc.context.enumerateIndirectObjects()) {
-    if (object instanceof PDFDict && object.has(N('ByteRange')) && object.has(N('Contents'))) return true
+    if (object instanceof lib.PDFDict && object.has(N('ByteRange')) && object.has(N('Contents'))) return true
   }
   return false
 }
@@ -228,7 +244,7 @@ async function decodeCandidate(c: Candidate, engine: ImageEngine): Promise<Decod
     return engine.decode(blob, { applyOrientation: false })
   }
   if (!engine.fromPixels) throw new Error('engine cannot wrap raw pixels')
-  const raw = decodePDFRawStream(c.stream).decode()
+  const raw = lib.decodePDFRawStream(c.stream).decode()
   const pixels = unpredict(raw, c.predictor, c.channels, c.report.width)
   return engine.fromPixels(toRgba(pixels, c.channels, c.report.width, c.report.height), c.report.width, c.report.height)
 }
@@ -260,15 +276,16 @@ export async function compressPdf(file: Blob, options: PdfCompressOptions = {}):
   const step = (s: string) => options.onStep?.(s)
 
   throwIfAborted(signal)
+  await loadPdfLib()
   const bytes = new Uint8Array(await file.arrayBuffer())
   let doc: PDFDocument
   let signed: boolean
   try {
-    doc = await PDFDocument.load(bytes, { updateMetadata: false })
+    doc = await lib.PDFDocument.load(bytes, { updateMetadata: false })
     doc.getPageCount() // forces the page tree to resolve, so junk fails here
     signed = isSigned(doc)
   } catch (error) {
-    if (error instanceof EncryptedPDFError) {
+    if (error instanceof lib.EncryptedPDFError) {
       throw new PdfCompressError('protected', 'PDF is encrypted', { cause: error })
     }
     throw new PdfCompressError('unreadable', 'PDF could not be parsed', { cause: error })
@@ -280,7 +297,7 @@ export async function compressPdf(file: Blob, options: PdfCompressOptions = {}):
   const images = doc.context
     .enumerateIndirectObjects()
     .filter((entry): entry is [PDFRef, PDFRawStream] =>
-      entry[1] instanceof PDFRawStream && entry[1].dict.lookup(N('Subtype')) === N('Image'),
+      entry[1] instanceof lib.PDFRawStream && entry[1].dict.lookup(N('Subtype')) === N('Image'),
     )
   // Soft masks and stencil masks must stay single-channel; a canvas can only
   // write RGB JPEGs, so they're left alone.
@@ -288,7 +305,7 @@ export async function compressPdf(file: Blob, options: PdfCompressOptions = {}):
   for (const [, stream] of images) {
     for (const key of ['SMask', 'Mask']) {
       const value = stream.dict.get(N(key))
-      if (value instanceof PDFRef) masks.add(value.toString())
+      if (value instanceof lib.PDFRef) masks.add(value.toString())
     }
   }
   for (const [ref, object] of images) {
@@ -429,11 +446,11 @@ export async function compressPdf(file: Blob, options: PdfCompressOptions = {}):
       dict.delete(N('DecodeParms'))
       dict.delete(N('Length'))
       dict.set(N('Filter'), N('DCTDecode'))
-      dict.set(N('Width'), PDFNumber.of(encoded.width))
-      dict.set(N('Height'), PDFNumber.of(encoded.height))
-      dict.set(N('BitsPerComponent'), PDFNumber.of(8))
+      dict.set(N('Width'), lib.PDFNumber.of(encoded.width))
+      dict.set(N('Height'), lib.PDFNumber.of(encoded.height))
+      dict.set(N('BitsPerComponent'), lib.PDFNumber.of(8))
       if (!c.keepColorSpace) dict.set(N('ColorSpace'), N('DeviceRGB'))
-      doc.context.assign(c.ref, PDFRawStream.of(dict, encoded.bytes))
+      doc.context.assign(c.ref, lib.PDFRawStream.of(dict, encoded.bytes))
       Object.assign(c.report, {
         status: 'recompressed',
         newBytes: encoded.bytes.length,

@@ -27,7 +27,8 @@
       "types": "./dist/pdf.d.ts",
       "import": "./dist/pdf.js",
       "require": "./dist/pdf.cjs"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
