@@ -1,6 +1,7 @@
 <div align="center">
 
-# sizely
+<!-- Absolute URL so the logo also shows on npm. jsDelivr serves SVG with an image MIME type; raw.githubusercontent.com doesn't. -->
+# <img src="https://cdn.jsdelivr.net/gh/educls/sizely@main/docs/logo.svg" alt="" height="32" /> sizely
 
 **Stop rejecting uploads. Fix them.**
 
@@ -12,8 +13,8 @@ Declarative file rules that validate *and* auto-fix files in the browser, before
 
 **[Try the live demo](https://educls.github.io/sizely/)**: drop a photo or a scanned PDF and watch it get fixed.
 
-<!-- TODO: record a 10s GIF of the demo (examples/demo): phone photo in, valid document photo out -->
-<img src="./docs/demo.gif" alt="A 5 MB phone photo becomes a valid 354×472 JPEG under 100 KB" width="640" />
+<!-- Absolute URL: npm renders this README without the docs/ folder, so a relative path breaks there. -->
+<img src="https://cdn.jsdelivr.net/gh/educls/sizely@main/docs/demo.gif" alt="A 41.8 MB phone photo becomes a valid 354×472 JPEG of 17 KB, under the 100 KB limit" width="640" />
 
 </div>
 
