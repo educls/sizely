@@ -13,8 +13,8 @@ Declarative file rules that validate *and* auto-fix files in the browser, before
 
 **[Try the live demo](https://educls.github.io/sizely/)**: drop a photo or a scanned PDF and watch it get fixed.
 
-<!-- Absolute URL: npm renders this README without the docs/ folder, so a relative path breaks there. -->
-<img src="https://cdn.jsdelivr.net/gh/educls/sizely@main/docs/demo.gif" alt="A 41.8 MB phone photo becomes a valid 354×472 JPEG of 17 KB, under the 100 KB limit" width="640" />
+<!-- Relative on purpose: npm resolves it against the GitHub repo, and GitHub caches it briefly, so GIF updates show up fast. -->
+<img src="./docs/demo.gif" alt="A 41.8 MB phone photo becomes a valid 354×472 JPEG of 17 KB, under the 100 KB limit" width="640" />
 
 </div>
 
