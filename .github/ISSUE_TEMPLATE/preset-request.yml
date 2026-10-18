@@ -1,0 +1,25 @@
+name: Preset request
+description: Propose a preset for a passport, visa, exam or portal
+labels: [preset, good first issue]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: What is it for?
+      placeholder: e.g. Brazilian passport online application photo
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Official source (link)
+      description: A government or institution page. Photo-shop blogs are not accepted.
+    validations:
+      required: true
+  - type: textarea
+    id: spec
+    attributes:
+      label: Requirements
+      description: Format, file size, pixel or print size, background, anything else.
+    validations:
+      required: true
