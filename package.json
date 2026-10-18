@@ -1,6 +1,6 @@
 {
   "name": "sizely",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Stop rejecting uploads. Fix them. Declarative file rules that validate AND auto-fix files in the browser before upload.",
   "type": "module",
   "sideEffects": false,
