@@ -1,8 +1,15 @@
-import { fitFile } from './fit'
-import { inspect } from './inspect'
-import { lengthToPx, parseSize, type LengthInput, type SizeInput } from './size'
-import { DEFAULT_SPEC, describeSpec, evaluate, type RuleKind, type RuleSpec } from './spec'
-import type { CheckResult, FitOptions, FitResult, ImageFormat, Locale } from './types'
+/**
+ * The public builder API: `sizely.image()`, `sizely.pdf()`, `sizely.any()`
+ * and the chainable `FileRule` they return, with `.check()` and `.fit()`.
+ */
+
+import { fitFile } from '../fit/fit-file'
+import { inspect } from '../inspect/inspect'
+import { lengthToPx, parseSize, type LengthInput, type SizeInput } from '../shared/size'
+import type { CheckResult, FitOptions, FitResult, ImageFormat, Locale } from '../shared/types'
+import { describeSpec } from './describe'
+import { evaluate } from './evaluate'
+import { DEFAULT_SPEC, type RuleKind, type RuleSpec } from './spec'
 
 type FormatInput = ImageFormat | 'jpg'
 

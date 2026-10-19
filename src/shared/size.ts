@@ -1,5 +1,7 @@
 /**
- * Size helpers. All units are binary (1 KB = 1024 bytes), which is the safer
+ * Parsing and formatting of file sizes (`'2MB'`) and print lengths (`'35mm'`).
+ *
+ * All size units are binary (1 KB = 1024 bytes), which is the safer
  * reading of portal limits like "up to 2 MB": a file that fits the binary
  * limit also fits the decimal one.
  */

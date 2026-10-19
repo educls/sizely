@@ -1,7 +1,12 @@
+/**
+ * Entry point for `sizely/react`: the `useSizely` hook, which wraps
+ * `rule.fit()` with React state and cancellation.
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FitError } from './errors'
-import type { FileRule } from './rules'
-import type { FitOptions, FitResult, Issue } from './types'
+import type { FileRule } from './rules/file-rule'
+import { FitError } from './shared/errors'
+import type { FitOptions, FitResult, Issue } from './shared/types'
 
 export type FitStatus = 'idle' | 'working' | 'done' | 'error'
 

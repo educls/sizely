@@ -14,7 +14,7 @@
     "paths": {
       "sizely": ["../../src/index.ts"],
       "sizely/react": ["../../src/react.ts"],
-      "sizely/pdf": ["../../src/pdf/index.ts"],
+      "sizely/pdf": ["../../src/pdf.ts"],
       "sizely/presets": ["../../src/presets.ts"]
     }
   },

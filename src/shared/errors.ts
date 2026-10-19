@@ -1,3 +1,8 @@
+/**
+ * `FitError`, thrown by `rule.fit()` when a file can't be fixed, and the
+ * abort helper used by every long-running step.
+ */
+
 import type { FileInfo, Issue } from './types'
 
 export type FitErrorReason =

@@ -5,7 +5,7 @@ export default defineConfig({
     index: 'src/index.ts',
     react: 'src/react.ts',
     presets: 'src/presets.ts',
-    pdf: 'src/pdf/index.ts',
+    pdf: 'src/pdf.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

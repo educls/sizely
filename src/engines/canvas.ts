@@ -1,5 +1,10 @@
-import { mimeOf } from '../inspect'
-import type { DecodedImage, DrawPlan, ImageEngine } from '../types'
+/**
+ * The default image engine: decodes with `createImageBitmap` and encodes
+ * with (Offscreen)Canvas. Runs in browsers and web workers.
+ */
+
+import { mimeOf } from '../shared/formats'
+import type { DecodedImage, DrawPlan, ImageEngine } from '../shared/types'
 
 type AnyCanvas = OffscreenCanvas | HTMLCanvasElement
 

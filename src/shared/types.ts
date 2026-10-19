@@ -1,3 +1,8 @@
+/**
+ * Public types shared across the library: file info, issues, results, and
+ * the engine interfaces that let you plug in your own image or PDF backend.
+ */
+
 export type ImageFormat = 'jpeg' | 'png' | 'webp'
 
 export type DetectedFormat =

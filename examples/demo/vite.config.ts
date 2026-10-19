@@ -12,7 +12,7 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^sizely\/react$/, replacement: src('react.ts') },
-      { find: /^sizely\/pdf$/, replacement: src('pdf/index.ts') },
+      { find: /^sizely\/pdf$/, replacement: src('pdf.ts') },
       { find: /^sizely\/presets$/, replacement: src('presets.ts') },
       { find: /^sizely$/, replacement: src('index.ts') },
     ],

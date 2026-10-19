@@ -1,10 +1,16 @@
-import { defaultEngine } from './engines/canvas'
-import { FitError, throwIfAborted } from './errors'
-import { planGeometry, scalePlan } from './geometry'
-import { EXTENSIONS, inspect, mimeOf } from './inspect'
-import { formatName, message } from './messages'
-import { formatSize } from './size'
-import { evaluate, type RuleSpec } from './spec'
+/**
+ * Fixes an image: plans the crop/resize, then searches formats, JPEG/WebP
+ * quality and, as a last resort, smaller dimensions until the file passes.
+ */
+
+import { defaultEngine } from '../engines/canvas'
+import { inspect } from '../inspect/inspect'
+import { message } from '../i18n/messages'
+import { evaluate } from '../rules/evaluate'
+import type { RuleSpec } from '../rules/spec'
+import { FitError, throwIfAborted } from '../shared/errors'
+import { formatName, mimeOf } from '../shared/formats'
+import { formatSize } from '../shared/size'
 import type {
   DecodedImage,
   DetectedFormat,
@@ -15,7 +21,9 @@ import type {
   ImageEngine,
   ImageFormat,
   Issue,
-} from './types'
+} from '../shared/types'
+import { planGeometry, scalePlan } from './geometry'
+import { outputName } from './output-name'
 
 const TOP_QUALITY = 0.92
 const SEARCH_STEPS = 6
@@ -27,11 +35,6 @@ interface Attempt {
   format: ImageFormat
   quality: number
   plan: DrawPlan
-}
-
-function outputName(file: Blob, format: DetectedFormat, override?: string) {
-  const name = override ?? (typeof File !== 'undefined' && file instanceof File ? file.name : 'file')
-  return `${name.replace(/\.[^./\\]+$/, '') || 'file'}.${EXTENSIONS[format]}`
 }
 
 /** Formats to try, best first. The current format wins when it's allowed. */
@@ -140,7 +143,7 @@ function describeSteps(original: FileInfo, srcW: number, srcH: number, attempt: 
   return steps
 }
 
-async function fitImage(
+export async function fitImage(
   file: Blob,
   spec: RuleSpec,
   original: FileInfo,
@@ -199,78 +202,4 @@ async function fitImage(
   } finally {
     image.close?.()
   }
-}
-
-async function fitPdf(
-  file: Blob,
-  spec: RuleSpec,
-  original: FileInfo,
-  issues: Issue[],
-  options: FitOptions,
-): Promise<FitResult> {
-  const locale = options.locale ?? 'en'
-  if (issues.some((i) => i.code !== 'too_large')) {
-    throw new FitError('not_fixable', issues, original)
-  }
-  if (!options.pdfEngine) throw new FitError('no_pdf_engine', issues, original)
-
-  const steps: string[] = []
-  let blob: Blob
-  try {
-    blob = await options.pdfEngine.compress(file, {
-      targetBytes: spec.maxSize,
-      signal: options.signal,
-      onStep: (step) => {
-        steps.push(step)
-        options.onStep?.(step)
-      },
-    })
-  } catch (error) {
-    if ((error as Error)?.name === 'AbortError' || options.signal?.aborted) throw error
-    // A missing optional dependency is the developer's to fix, not the end user's.
-    if ((error as Error)?.name === 'SizelyDependencyError') throw error
-    const code = (error as { issueCode?: unknown })?.issueCode
-    const issueCode = code === 'protected' ? 'protected' : 'unreadable'
-    const issue: Issue = { code: issueCode, message: message(locale, issueCode) }
-    const fitError = new FitError(issueCode === 'protected' ? 'not_fixable' : 'unreadable', [issue], original)
-    ;(fitError as { cause?: unknown }).cause = error
-    throw fitError
-  }
-  throwIfAborted(options.signal)
-  const out = new File([blob], outputName(file, 'pdf', options.fileName), { type: 'application/pdf' })
-  const info = await inspect(out)
-  const remaining = evaluate(spec, info, locale)
-  if (remaining.length) throw new FitError('gave_up', remaining, original, out)
-  if (steps.length === 0) {
-    // Engines that don't report progress still get a summary line.
-    const summary = `compressed PDF ${formatSize(original.size)} → ${formatSize(out.size)}`
-    steps.push(summary)
-    options.onStep?.(summary)
-  }
-  return { file: out, changed: true, original, info, steps }
-}
-
-/** Validates `file` against `spec` and fixes it when possible. */
-export async function fitFile(
-  file: Blob,
-  spec: RuleSpec,
-  options: FitOptions = {},
-): Promise<FitResult> {
-  throwIfAborted(options.signal)
-  const locale = options.locale ?? 'en'
-  const original = await inspect(file)
-  const issues = evaluate(spec, original, locale)
-
-  if (issues.length === 0) {
-    const asFile =
-      typeof File !== 'undefined' && file instanceof File
-        ? file
-        : new File([file], outputName(file, original.format, options.fileName), { type: original.mime })
-    return { file: asFile, changed: false, original, info: original, steps: [] }
-  }
-
-  if (issues.some((i) => i.code === 'wrong_type')) throw new FitError('not_fixable', issues, original)
-  if (original.kind === 'pdf') return fitPdf(file, spec, original, issues, options)
-  if (original.kind === 'image') return fitImage(file, spec, original, options)
-  throw new FitError('not_fixable', issues, original)
 }

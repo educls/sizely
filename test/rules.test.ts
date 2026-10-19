@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { planGeometry } from '../src/geometry'
+import { planGeometry } from '../src/fit/geometry'
 import { presets } from '../src/presets'
-import { sizely } from '../src/rules'
-import { makeJpeg, makePdf, makePng, toFile } from './helpers'
+import { sizely } from '../src/rules/file-rule'
+import { makeJpeg, makePdf, makePng, toFile } from './helpers/image-engine'
 
 const codes = (r: { issues: readonly { code: string }[] }) => r.issues.map((i) => i.code)
 

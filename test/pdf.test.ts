@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { FitError } from '../src/errors'
+import { FitError } from '../src/shared/errors'
 import { compressPdf, PdfCompressError, pdfEngine } from '../src/pdf'
 import { toRgba, unpredict } from '../src/pdf/pixels'
-import { sizely } from '../src/rules'
-import { fakeEngine } from './helpers'
-import { buildPdf, pattern, pngFilter, readImages, scanBytes } from './pdf-helpers'
+import { sizely } from '../src/rules/file-rule'
+import { fakeEngine } from './helpers/image-engine'
+import { buildPdf, pattern, pngFilter, readImages, scanBytes } from './helpers/pdf'
 
 const MB = 1024 ** 2
 const A4 = { width: 2480, height: 3508 } // A4 at 300 dpi
@@ -230,8 +230,8 @@ describe('without @cantoo/pdf-lib installed', () => {
     })
     return {
       pdf: await import('../src/pdf'),
-      rules: await import('../src/rules'),
-      errors: await import('../src/errors'),
+      rules: await import('../src/rules/file-rule'),
+      errors: await import('../src/shared/errors'),
     }
   }
 

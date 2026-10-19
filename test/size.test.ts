@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatSize, lengthToPx, parseSize } from '../src/size'
+import { formatSize, lengthToPx, parseSize } from '../src/shared/size'
 
 describe('parseSize', () => {
   it.each([

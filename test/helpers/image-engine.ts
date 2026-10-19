@@ -1,5 +1,5 @@
-import { imageSize, sniff } from '../src/inspect'
-import type { DecodedImage, DrawPlan, ImageEngine, ImageFormat } from '../src/types'
+import { imageSize, sniff } from '../../src'
+import type { DecodedImage, DrawPlan, ImageEngine, ImageFormat } from '../../src/shared/types'
 
 const be16 = (n: number) => [(n >> 8) & 0xff, n & 0xff]
 const le32 = (n: number) => [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, (n >>> 24) & 0xff]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { imageSize, inspect, pdfPageCount, sniff } from '../src/inspect'
-import { makeJpeg, makePdf, makePng, makeWebp, toFile } from './helpers'
+import { imageSize, inspect, pdfPageCount, sniff } from '../src'
+import { makeJpeg, makePdf, makePng, makeWebp, toFile } from './helpers/image-engine'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 

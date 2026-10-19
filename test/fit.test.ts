@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { FitError } from '../src/errors'
-import { candidateFormats } from '../src/fit'
-import { sizely } from '../src/rules'
-import { DEFAULT_SPEC } from '../src/spec'
-import type { PdfEngine } from '../src/types'
-import { fakeEngine, makeJpeg, makePdf, makePng, toFile } from './helpers'
+import { FitError } from '../src/shared/errors'
+import { candidateFormats } from '../src/fit/fit-image'
+import { sizely } from '../src/rules/file-rule'
+import { DEFAULT_SPEC } from '../src/rules/spec'
+import type { PdfEngine } from '../src/shared/types'
+import { fakeEngine, makeJpeg, makePdf, makePng, toFile } from './helpers/image-engine'
 
 const phone = () => toFile(makeJpeg(4032, 3024, 3 * 1024 ** 2, 6), 'IMG_0042.JPG', 'image/jpeg')
 

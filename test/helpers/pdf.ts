@@ -13,7 +13,7 @@ import {
   concatTransformationMatrix,
 } from '@cantoo/pdf-lib'
 import { zlibSync } from 'fflate'
-import { BYTES_PER_PIXEL, makeJpeg } from './helpers'
+import { BYTES_PER_PIXEL, makeJpeg } from './image-engine'
 
 export type TestImage =
   | { kind: 'jpeg'; width: number; height: number; bytes?: number; colorSpace?: 'DeviceRGB' | 'DeviceGray' | 'DeviceCMYK' | 'ICC3'; smask?: boolean }

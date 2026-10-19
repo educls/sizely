@@ -1,4 +1,9 @@
-import type { DrawPlan } from './types'
+/**
+ * Pure math for crop, letterbox and resize. Produces a `DrawPlan` that an
+ * image engine executes; no pixels are touched here.
+ */
+
+import type { DrawPlan } from '../shared/types'
 
 export interface GeometrySpec {
   width?: number
@@ -102,11 +107,3 @@ export function scalePlan(plan: DrawPlan, factor: number): DrawPlan {
     dh: plan.dh * ky,
   }
 }
-
-export const isIdentity = (plan: DrawPlan, srcW: number, srcH: number) =>
-  plan.width === srcW &&
-  plan.height === srcH &&
-  plan.sx === 0 &&
-  plan.sy === 0 &&
-  plan.sw === srcW &&
-  plan.sh === srcH

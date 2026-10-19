@@ -1,4 +1,9 @@
 /**
+ * Pixel helpers for Flate-compressed PDF images: undo PNG/TIFF predictors and
+ * expand gray or RGB pixels to the RGBA an image engine expects.
+ */
+
+/**
  * Undoes PDF/PNG predictors on decoded Flate data. Only 8 bits per component.
  *
  * - Predictor 1: none

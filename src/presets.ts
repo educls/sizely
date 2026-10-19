@@ -1,5 +1,7 @@
-import { sizely, type FileRule } from './rules'
-import type { SizeInput } from './size'
+/** Entry point for `sizely/presets`: ready-made rules for common uploads. */
+
+import { sizely, type FileRule } from './rules/file-rule'
+import type { SizeInput } from './shared/size'
 
 /**
  * Generic, ready-made rules. They are starting points, not official specs:

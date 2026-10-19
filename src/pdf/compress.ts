@@ -1,241 +1,23 @@
-import type { PDFDict, PDFDocument, PDFRawStream, PDFRef } from '@cantoo/pdf-lib'
-import { defaultEngine } from '../engines/canvas'
-import { throwIfAborted } from '../errors'
-import { formatSize } from '../size'
-import type { DecodedImage, DrawPlan, ImageEngine, PdfEngine } from '../types'
-import { toRgba, unpredict } from './pixels'
-
-export type PdfCompressErrorCode = 'protected' | 'unreadable'
-
-/** Thrown for PDFs sizely/pdf must not or cannot touch. */
-export class PdfCompressError extends Error {
-  override readonly name = 'PdfCompressError'
-  /** Read by `fit()` to produce an end-user message. */
-  readonly issueCode: PdfCompressErrorCode
-
-  constructor(code: PdfCompressErrorCode, message: string, options?: { cause?: unknown }) {
-    super(message)
-    this.issueCode = code
-    if (options?.cause !== undefined) (this as { cause?: unknown }).cause = options.cause
-  }
-}
-
-export interface PdfCompressOptions {
-  /** Aim for this many bytes. Without it, images are re-encoded once at `defaultQuality`. */
-  targetBytes?: number
-  signal?: AbortSignal
-  /** Image engine for decoding and re-encoding. Defaults to the canvas engine. */
-  engine?: ImageEngine
-  /** Highest JPEG quality tried (default 0.85). */
-  maxQuality?: number
-  /** Lowest JPEG quality before images are downscaled (default 0.4). */
-  minQuality?: number
-  /** Quality used when there's no target (default 0.75). */
-  defaultQuality?: number
-  /**
-   * Images are never downscaled below this many pixels on their long side
-   * (default 1000, roughly 85 dpi for an A4 scan). Keeps documents readable.
-   */
-  minLongSide?: number
-  /** Images smaller than this are left alone (default 8 KB). */
-  minImageBytes?: number
-  onStep?: (step: string) => void
-}
-
-export type PdfImageStatus = 'recompressed' | 'kept' | 'skipped'
-
-export interface PdfImageReport {
-  /** Object reference, e.g. `12 0 R`. */
-  ref: string
-  width: number
-  height: number
-  filter: string
-  originalBytes: number
-  status: PdfImageStatus
-  /** Present when recompressed. */
-  newBytes?: number
-  newWidth?: number
-  newHeight?: number
-  /** Why an image was skipped or kept. */
-  reason?: string
-}
-
-export interface PdfCompressResult {
-  blob: Blob
-  originalSize: number
-  size: number
-  /** `null` when no target was given. */
-  metTarget: boolean | null
-  images: PdfImageReport[]
-  /** The global settings applied to recompressed images. */
-  settings: { quality: number; scale: number } | null
-}
-
-interface Candidate {
-  ref: PDFRef
-  stream: PDFRawStream
-  report: PdfImageReport
-  filter: 'DCTDecode' | 'FlateDecode'
-  channels: 1 | 3
-  /** Keep the original colour space (RGB or 3-channel ICC); gray becomes DeviceRGB. */
-  keepColorSpace: boolean
-  predictor: number
-  image?: DecodedImage
-}
-
-interface Encoded {
-  bytes: Uint8Array
-  width: number
-  height: number
-}
-
-type PdfLib = typeof import('@cantoo/pdf-lib')
-
-const MISSING_PDF_LIB = 'sizely/pdf needs @cantoo/pdf-lib. Install it with: npm install @cantoo/pdf-lib'
-
-/** Set by `loadPdfLib()`; every helper below runs after `compressPdf` has awaited it. */
-let lib: PdfLib
-let loading: Promise<PdfLib> | undefined
-
 /**
- * `@cantoo/pdf-lib` is an optional peer dependency, so it's loaded on first
- * use: importing sizely/pdf never fails, and a missing install gets a clear
- * message instead of a raw module-not-found error.
+ * `compressPdf()`: shrinks a PDF by recompressing the images inside it.
+ * Loads pdf-lib, analyzes every image, then searches for the highest JPEG
+ * quality (and, if needed, the smallest scale) that meets the target size.
  */
-function loadPdfLib(): Promise<PdfLib> {
-  loading ??= import('@cantoo/pdf-lib').then(
-    (mod) => (lib = mod),
-    (cause: unknown) => {
-      loading = undefined
-      const error = new Error(MISSING_PDF_LIB)
-      error.name = 'SizelyDependencyError'
-      ;(error as { cause?: unknown }).cause = cause
-      throw error
-    },
-  )
-  return loading
-}
 
-const N = (name: string) => lib.PDFName.of(name)
+import type { PDFDocument, PDFRawStream, PDFRef } from '@cantoo/pdf-lib'
+import { defaultEngine } from '../engines/canvas'
+import { throwIfAborted } from '../shared/errors'
+import { formatSize } from '../shared/size'
+import type { DecodedImage, DrawPlan, ImageEngine } from '../shared/types'
+import { analyze, analyzeReport, isSigned } from './analyze'
+import { PdfCompressError } from './errors'
+import { lib, loadPdfLib, N } from './pdf-lib'
+import { toRgba, unpredict } from './pixels'
+import type { Candidate, Encoded, PdfCompressOptions, PdfCompressResult, PdfImageReport } from './types'
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const SEARCH_STEPS = 5
 const MAX_SHRINK_ROUNDS = 8
-
-function filterName(dict: PDFDict): string | undefined {
-  const filter = dict.lookup(N('Filter'))
-  if (filter instanceof lib.PDFName) return filter.decodeText()
-  if (filter instanceof lib.PDFArray) {
-    if (filter.size() === 0) return undefined
-    if (filter.size() > 1) return filter.asArray().map((f) => (f instanceof lib.PDFName ? f.decodeText() : '?')).join('+')
-    const only = filter.lookup(0)
-    return only instanceof lib.PDFName ? only.decodeText() : '?'
-  }
-  return undefined
-}
-
-function decodeParm(dict: PDFDict, key: string): number | undefined {
-  let parms = dict.lookup(N('DecodeParms'))
-  if (parms instanceof lib.PDFArray) parms = parms.lookup(0)
-  if (!(parms instanceof lib.PDFDict)) return undefined
-  const value = parms.lookup(N(key))
-  return value instanceof lib.PDFNumber ? value.asNumber() : undefined
-}
-
-/** Returns the channel count and whether the colour space can be kept, or a skip reason. */
-function colorSpaceInfo(dict: PDFDict): { channels: 1 | 3; keep: boolean } | string {
-  const cs = dict.lookup(N('ColorSpace'))
-  if (cs instanceof lib.PDFName) {
-    const name = cs.decodeText()
-    if (name === 'DeviceRGB') return { channels: 3, keep: true }
-    if (name === 'DeviceGray') return { channels: 1, keep: false }
-    return `colour space ${name}`
-  }
-  if (cs instanceof lib.PDFArray) {
-    const family = cs.lookup(0)
-    const familyName = family instanceof lib.PDFName ? family.decodeText() : '?'
-    if (familyName === 'ICCBased') {
-      const profile = cs.lookup(1)
-      const n = profile instanceof lib.PDFRawStream ? profile.dict.lookup(N('N')) : undefined
-      const channels = n instanceof lib.PDFNumber ? n.asNumber() : 0
-      if (channels === 3) return { channels: 3, keep: true }
-      if (channels === 1) return { channels: 1, keep: false }
-      return `ICC colour space with ${channels} channels`
-    }
-    if (familyName === 'CalRGB') return { channels: 3, keep: true }
-    if (familyName === 'CalGray') return { channels: 1, keep: false }
-    return `colour space ${familyName}`
-  }
-  return 'missing colour space'
-}
-
-function analyzeReport(ref: PDFRef, stream: PDFRawStream): PdfImageReport {
-  const num = (key: string) => {
-    const v = stream.dict.lookup(N(key))
-    return v instanceof lib.PDFNumber ? v.asNumber() : 0
-  }
-  return {
-    ref: ref.toString(),
-    width: num('Width'),
-    height: num('Height'),
-    filter: filterName(stream.dict) ?? 'none',
-    originalBytes: stream.contents.length,
-    status: 'skipped',
-  }
-}
-
-/** True when a Decode array is present and differs from the default [0 1 0 1 …]. */
-function hasCustomDecode(dict: PDFDict): boolean {
-  const decode = dict.lookup(N('Decode'))
-  if (!(decode instanceof lib.PDFArray)) return false
-  return decode.asArray().some((v, i) => !(v instanceof lib.PDFNumber) || v.asNumber() !== i % 2)
-}
-
-function analyze(ref: PDFRef, stream: PDFRawStream, minImageBytes: number): Candidate | PdfImageReport {
-  const { dict } = stream
-  const report = analyzeReport(ref, stream)
-  const { filter } = report
-  const bpc = dict.lookup(N('BitsPerComponent'))
-  const skip = (reason: string) => ({ ...report, reason })
-
-  if (dict.lookup(N('ImageMask')) === lib.PDFBool.True) return skip('image mask')
-  if (!(bpc instanceof lib.PDFNumber) || bpc.asNumber() !== 8) {
-    return skip(`${bpc instanceof lib.PDFNumber ? bpc.asNumber() : '?'} bits per component`)
-  }
-  if (filter !== 'DCTDecode' && filter !== 'FlateDecode') return skip(`filter ${filter}`)
-  if (hasCustomDecode(dict)) return skip('custom Decode array')
-  if (dict.lookup(N('Mask')) instanceof lib.PDFArray) return skip('colour-key mask')
-  if (!report.width || !report.height) return skip('missing dimensions')
-  if (report.originalBytes < minImageBytes) return skip('already small')
-
-  const cs = colorSpaceInfo(dict)
-  if (typeof cs === 'string') return skip(cs)
-
-  let predictor = 1
-  if (filter === 'FlateDecode') {
-    predictor = decodeParm(dict, 'Predictor') ?? 1
-    const colors = decodeParm(dict, 'Colors') ?? 1
-    const bpc = decodeParm(dict, 'BitsPerComponent') ?? 8
-    const columns = decodeParm(dict, 'Columns') ?? 1
-    if (predictor > 1 && (colors !== cs.channels || bpc !== 8 || columns !== report.width)) {
-      return skip('unusual predictor parameters')
-    }
-    if (predictor > 2 && predictor < 10) return skip(`predictor ${predictor}`)
-  }
-
-  return { ref, stream, report, filter, channels: cs.channels, keepColorSpace: cs.keep, predictor }
-}
-
-function isSigned(doc: PDFDocument): boolean {
-  const acroForm = doc.catalog.lookup(N('AcroForm'))
-  if (acroForm instanceof lib.PDFDict) {
-    const flags = acroForm.lookup(N('SigFlags'))
-    if (flags instanceof lib.PDFNumber && (flags.asNumber() & 1) === 1) return true
-  }
-  for (const [, object] of doc.context.enumerateIndirectObjects()) {
-    if (object instanceof lib.PDFDict && object.has(N('ByteRange')) && object.has(N('Contents'))) return true
-  }
-  return false
-}
 
 async function decodeCandidate(c: Candidate, engine: ImageEngine): Promise<DecodedImage> {
   if (c.filter === 'DCTDecode') {
@@ -477,22 +259,5 @@ export async function compressPdf(file: Blob, options: PdfCompressOptions = {}):
     }
   } finally {
     candidates.forEach((c) => c.image?.close?.())
-  }
-}
-
-/**
- * A `PdfEngine` for `fit()`:
- *
- * ```ts
- * import { pdfEngine } from 'sizely/pdf'
- * await sizely.pdf().maxSize('2MB').fit(file, { pdfEngine: pdfEngine() })
- * ```
- */
-export function pdfEngine(defaults: Omit<PdfCompressOptions, 'targetBytes' | 'signal' | 'onStep'> = {}): PdfEngine {
-  return {
-    async compress(file, { targetBytes, signal, onStep }) {
-      const result = await compressPdf(file, { ...defaults, targetBytes, signal, onStep })
-      return result.blob
-    },
   }
 }
